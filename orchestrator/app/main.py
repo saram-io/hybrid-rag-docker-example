@@ -27,14 +27,44 @@ s3 = boto3.client(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure bucket exists
-    try:
-        s3.head_bucket(Bucket=settings.rustfs_bucket)
-    except Exception:
-        s3.create_bucket(Bucket=settings.rustfs_bucket)
+    from botocore.exceptions import ClientError
+    
+    # Ensure bucket exists (wait/retry for RustFS to be ready)
+    max_retries = 30
+    for i in range(max_retries):
+        try:
+            s3.head_bucket(Bucket=settings.rustfs_bucket)
+            break
+        except Exception as e:
+            if isinstance(e, ClientError):
+                status_code = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                if status_code == 404:
+                    try:
+                        s3.create_bucket(Bucket=settings.rustfs_bucket)
+                        break
+                    except Exception as create_err:
+                        if i == max_retries - 1:
+                            raise create_err
+            if i == max_retries - 1:
+                logger.error("Failed to connect to RustFS at %s", settings.rustfs_endpoint)
+                raise e
+            logger.warning("RustFS not ready yet (attempt %d/%d). Retrying in 2s...", i + 1, max_retries)
+            time.sleep(2)
 
-    # Probe embedding dimension
-    dim = len(get_embedding("dimension probe"))
+    # Wait/retry for embedding model to be ready in Ollama
+    dim = None
+    max_ollama_retries = 180
+    for i in range(max_ollama_retries):
+        try:
+            dim = len(get_embedding("dimension probe"))
+            break
+        except Exception as e:
+            if i == max_ollama_retries - 1:
+                logger.error("Failed to connect to Ollama or model %s not ready", settings.embedding_model)
+                raise e
+            logger.warning("Ollama or embedding model not ready (attempt %d/%d). Retrying in 5s...", i + 1, max_ollama_retries)
+            time.sleep(5)
+
     init_table(dim)
     engine.rebuild()
     logger.info("Ready. %d chunks indexed. Embedding dim=%d.", engine.chunk_count, dim)

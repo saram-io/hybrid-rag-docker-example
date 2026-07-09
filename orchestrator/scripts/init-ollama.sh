@@ -4,7 +4,7 @@ set -e
 # Wait for Ollama API
 MAX_RETRIES=60
 RETRY_COUNT=0
-while ! curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do
+while ! ollama list > /dev/null 2>&1; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
         echo "ERROR: Ollama API not ready"

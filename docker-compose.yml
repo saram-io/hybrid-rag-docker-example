@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   rustfs:
     image: rustfs/rustfs:latest
@@ -13,24 +11,21 @@ services:
     volumes:
       - rustfs_data:/data
     command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+    # Healthcheck disabled: RustFS requires authentication for all endpoints
+    # The rag-orchestrator will handle connection validation on startup
     restart: unless-stopped
 
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
+    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & /docker-entrypoint-init.d/init-ollama.sh && wait"]
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
       - ./orchestrator/scripts/init-ollama.sh:/docker-entrypoint-init.d/init-ollama.sh:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -62,7 +57,7 @@ services:
       - lancedb_data:/app/data/lancedb
     depends_on:
       rustfs:
-        condition: service_healthy
+        condition: service_started
       ollama:
         condition: service_healthy
     healthcheck:
