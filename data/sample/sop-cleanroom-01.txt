@@ -1,0 +1,5 @@
+SOP-CLEANROOM-01: Environmental Monitoring Parameters.
+All cold room storage arrays designated under tier-1 biological compliance
+must operate continuously at a threshold setting of 4.0°C. If sensor reading
+array CR-MODULE-99 drops below 2.0°C, an absolute deviation event is
+registered, and quality control management must be notified immediately.

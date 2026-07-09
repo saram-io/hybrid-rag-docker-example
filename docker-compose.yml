@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - RUSTFS_ROOT_USER=admin
+      - RUSTFS_ROOT_PASSWORD=admin123456
+    volumes:
+      - rustfs_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./orchestrator/scripts/init-ollama.sh:/docker-entrypoint-init.d/init-ollama.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  rag-orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: rag-orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - RUSTFS_ENDPOINT=rustfs:9000
+      - RUSTFS_ACCESS_KEY=admin
+      - RUSTFS_SECRET_KEY=admin123456
+      - RUSTFS_BUCKET=documents
+      - OLLAMA_HOST=http://ollama:11434
+      - EMBEDDING_MODEL=qwen3-embedding:8b
+      - FRONTIER_MODEL_URL=http://ollama:11434/v1
+      - FRONTIER_MODEL_NAME=qwen3:32b
+      - LANCEDB_URI=/app/data/lancedb
+      - CHUNK_SIZE=512
+      - CHUNK_OVERLAP=50
+      - TOP_K=5
+      - DENSE_WEIGHT=0.7
+    volumes:
+      - lancedb_data:/app/data/lancedb
+    depends_on:
+      rustfs:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  rustfs_data:
+  ollama_data:
+  lancedb_data:
