@@ -99,6 +99,51 @@ The architecture is fully self-hosted, keeping raw document text and embedding g
      -d '{"query": "What happens if CR-MODULE-99 reports a low temperature?"}'
    ```
 
+
+## NVIDIA GPU Acceleration (Optional)
+
+To run embedding generation and generation workloads on your local NVIDIA GPU (e.g. GeForce RTX 4090), you must configure GPU passthrough:
+
+### 1. Prerequisites (Host Machine)
+1. **NVIDIA Drivers**: Ensure you have proprietary NVIDIA drivers installed (run `nvidia-smi` to verify).
+2. **Standard Docker Engine (Docker CE)**: Install the native Docker Engine on the host instead of **Docker Desktop for Linux** (Docker Desktop runs inside a VM and does not support direct GPU passthrough on Linux).
+3. **NVIDIA Container Toolkit**: Bridge the host's GPU and Docker. Install the toolkit and register it with the Docker runtime:
+   ```bash
+   sudo nvidia-ctk runtime configure --runtime=docker
+   sudo systemctl restart docker
+   ```
+4. **Permissions**: Ensure your user has access to standard Docker:
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker
+   # For immediate agent/daemon access:
+   sudo chmod 666 /var/run/docker.sock
+   ```
+
+### 2. Configure `docker-compose.yml`
+Ensure your `docker-compose.yml` contains the `deploy` block under the `ollama` service:
+```yaml
+  ollama:
+    # ... other config ...
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
+### 3. Verification
+Verify that Ollama binds to your GPU during startup:
+```bash
+docker compose logs ollama
+```
+Look for CUDA initialization logs:
+`ollama  | ... msg="inference compute" id=0 library=CUDA name=CUDA0 description="NVIDIA GeForce RTX 4090" ...`
+
+---
+
 ## Tuning Retrieval Weights
 The retrieval balance is controlled by the `DENSE_WEIGHT` environment variable:
 - `0.3`: 70% Keyword search, 30% Semantic search (best for codes/part numbers).
